@@ -54,7 +54,6 @@
   .no-results { padding: 40px; text-align: center; color: #9a8a6e; font-style: italic; }
   /* Selection toolbar */
   .group-toolbar { display: flex; align-items: center; gap: 7px; padding: 0 0 10px; flex-wrap: wrap; border-bottom: 1px solid #e0d9cc; margin-bottom: 12px; }
-  .group-toolbar.hidden { display: none; }
   .sel-info { font-size: 0.83rem; color: #4a3c28; white-space: nowrap; margin-right: 2px; }
   .tb-btn { padding: 5px 11px; border: 1px solid #b0a48a; background: #fffdf8; border-radius: 4px; cursor: pointer; font-size: 0.82rem; color: #4a3c28; font-family: inherit; white-space: nowrap; }
   .tb-btn:hover { background: #ede8dc; }
@@ -368,25 +367,42 @@ function loadFiles(cell, g) {
   cell.dataset.loaded = '1';
 
   if (viewMode === 'thumb') {
-    // ── Selection toolbar ──────────────────────────────────────────────────
+    // ── Toolbar (always visible) ───────────────────────────────────────────
     const toolbar = document.createElement('div');
-    toolbar.className = 'group-toolbar hidden';
-    const info = document.createElement('span');
-    info.className = 'sel-info';
-    toolbar._info = info;
+    toolbar.className = 'group-toolbar';
 
-    const btnSelAll  = document.createElement('button'); btnSelAll.className  = 'tb-btn sel-all'; btnSelAll.textContent = 'Select All';
-    const btnDesel   = document.createElement('button'); btnDesel.className   = 'tb-btn desel';   btnDesel.textContent  = 'Deselect All';
-    const btnRotL    = document.createElement('button'); btnRotL.className    = 'tb-btn rot-sel'; btnRotL.textContent   = '\u21ba Rotate Selected Left';
-    const btnRotR    = document.createElement('button'); btnRotR.className    = 'tb-btn rot-sel'; btnRotR.textContent   = '\u21bb Rotate Selected Right';
+    // Rotate All buttons — always shown
+    const btnRotAllL = document.createElement('button'); btnRotAllL.className = 'tb-btn rot-sel'; btnRotAllL.textContent = '\u21ba Rotate All Left';
+    const btnRotAllR = document.createElement('button'); btnRotAllR.className = 'tb-btn rot-sel'; btnRotAllR.textContent = '\u21bb Rotate All Right';
+    btnRotAllL.addEventListener('click', () => g.files.forEach(f => rotate(f, -90)));
+    btnRotAllR.addEventListener('click', () => g.files.forEach(f => rotate(f,  90)));
+
+    // Divider
+    const div1 = document.createElement('span');
+    div1.style.cssText = 'border-left:1px solid #c8bfa8;height:1.2em;margin:0 2px';
+
+    // Selection buttons — shown only when something is selected
+    const info      = document.createElement('span');       info.className      = 'sel-info';
+    const btnSelAll = document.createElement('button');     btnSelAll.className = 'tb-btn sel-all'; btnSelAll.textContent = 'Select All';
+    const btnDesel  = document.createElement('button');     btnDesel.className  = 'tb-btn desel';   btnDesel.textContent  = 'Deselect All';
+    const btnRotL   = document.createElement('button');     btnRotL.className   = 'tb-btn rot-sel'; btnRotL.textContent   = '\u21ba Rotate Selected';
+    const btnRotR   = document.createElement('button');     btnRotR.className   = 'tb-btn rot-sel'; btnRotR.textContent   = '\u21bb Rotate Selected';
+    const selGroup  = [info, btnDesel, btnRotL, btnRotR];
+    selGroup.forEach(el => { el.classList.add('sel-only'); el.style.display = 'none'; });
 
     btnSelAll.addEventListener('click', () => { g.files.forEach(f => getSel(g).add(f)); updateSelUI(g, cell); });
     btnDesel.addEventListener('click',  () => { getSel(g).clear(); updateSelUI(g, cell); });
-    btnRotL.addEventListener('click',   () => { getSel(g).forEach(f => rotate(f, -90)); });
-    btnRotR.addEventListener('click',   () => { getSel(g).forEach(f => rotate(f,  90)); });
+    btnRotL.addEventListener('click',   () => getSel(g).forEach(f => rotate(f, -90)));
+    btnRotR.addEventListener('click',   () => getSel(g).forEach(f => rotate(f,  90)));
 
-    toolbar.appendChild(info);
+    toolbar._info     = info;
+    toolbar._selGroup = selGroup;
+
+    toolbar.appendChild(btnRotAllL);
+    toolbar.appendChild(btnRotAllR);
+    toolbar.appendChild(div1);
     toolbar.appendChild(btnSelAll);
+    toolbar.appendChild(info);
     toolbar.appendChild(btnDesel);
     toolbar.appendChild(btnRotL);
     toolbar.appendChild(btnRotR);
@@ -520,8 +536,8 @@ function updateSelUI(g, cell) {
   const sel     = getSel(g);
   const toolbar = cell._toolbar;
   if (!toolbar) return;
-  const hasAny = sel.size > 0;
-  toolbar.classList.toggle('hidden', !hasAny);
+  const hasAny  = sel.size > 0;
+  toolbar._selGroup.forEach(el => el.style.display = hasAny ? '' : 'none');
   if (hasAny) toolbar._info.textContent = sel.size + ' of ' + g.files.length + ' selected —';
   cell.querySelectorAll('.thumb-item[data-fname]').forEach(item => {
     item.classList.toggle('selected', sel.has(item.dataset.fname));
@@ -698,8 +714,6 @@ document.getElementById('th-date').className = 'sorted-asc';
       <button class="lb-btn" id="lb-prev" onclick="lbNav(-1)">&#8592; Prev</button>
       <button class="lb-btn" onclick="rotate(lb.group.files[lb.idx], -90)" title="Rotate left (L)">&#8634; CCW</button>
       <button class="lb-btn" onclick="rotate(lb.group.files[lb.idx],  90)" title="Rotate right (R)">&#8635; CW</button>
-      <button class="lb-btn" onclick="lb.group.files.forEach(f=>rotate(f,-90))" title="Rotate every image in this group left">&#8634; All</button>
-      <button class="lb-btn" onclick="lb.group.files.forEach(f=>rotate(f, 90))" title="Rotate every image in this group right">&#8635; All</button>
       <span class="lb-counter" id="lb-counter"></span>
       <button class="lb-btn" id="lb-next" onclick="lbNav(1)">Next &#8594;</button>
       <button class="lb-btn close" onclick="closeLightbox()">&#10005; Close</button>
