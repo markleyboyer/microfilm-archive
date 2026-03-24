@@ -319,34 +319,44 @@ function render(rows) {
   document.getElementById('stats').textContent =
     rows.length.toLocaleString() + ' groups · ' + total.toLocaleString() + ' files';
 
-  rows.forEach(g => {
-    const tr = document.createElement('tr');
-    tr.className = 'group-row';
-    tr.innerHTML =
-      '<td class="chevron">&#9654;</td>' +
-      '<td>' + g.name + '</td>' +
-      '<td class="date-col">' + g.date + '</td>' +
-      '<td class="count">' + g.files.length + '</td>';
+  // Build rows in batches so the browser can paint between chunks
+  const BATCH = 60;
+  let i = 0;
+  function renderBatch() {
+    const frag = document.createDocumentFragment();
+    for (let end = Math.min(i + BATCH, rows.length); i < end; i++) {
+      const g = rows[i];
+      const tr = document.createElement('tr');
+      tr.className = 'group-row';
+      tr.innerHTML =
+        '<td class="chevron">&#9654;</td>' +
+        '<td>' + g.name + '</td>' +
+        '<td class="date-col">' + g.date + '</td>' +
+        '<td class="count">' + g.files.length + '</td>';
 
-    const filesRow = document.createElement('tr');
-    filesRow.className = 'files-row';
-    filesRow.innerHTML = '<td colspan="4"></td>';
+      const filesRow = document.createElement('tr');
+      filesRow.className = 'files-row';
+      filesRow.innerHTML = '<td colspan="4"></td>';
 
-    tr.addEventListener('click', function() {
-      const open = filesRow.classList.contains('visible');
-      if (open) {
-        filesRow.classList.remove('visible');
-        tr.classList.remove('expanded');
-      } else {
-        tr.classList.add('expanded');
-        filesRow.classList.add('visible');
-        loadFiles(filesRow.querySelector('td'), g);
-      }
-    });
+      tr.addEventListener('click', function() {
+        const open = filesRow.classList.contains('visible');
+        if (open) {
+          filesRow.classList.remove('visible');
+          tr.classList.remove('expanded');
+        } else {
+          tr.classList.add('expanded');
+          filesRow.classList.add('visible');
+          loadFiles(filesRow.querySelector('td'), g);
+        }
+      });
 
-    tbody.appendChild(tr);
-    tbody.appendChild(filesRow);
-  });
+      frag.appendChild(tr);
+      frag.appendChild(filesRow);
+    }
+    tbody.appendChild(frag);
+    if (i < rows.length) requestAnimationFrame(renderBatch);
+  }
+  renderBatch();
 }
 
 function makeRotBtn(symbol, title, fname, delta) {
@@ -663,23 +673,35 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'l' || e.key === 'L') rotate(lb.group.files[lb.idx], -90);
 });
 
-// Deferred init — parse data after page has rendered to avoid blocking the UI
-setTimeout(() => {
-  DATA = JSON.parse(document.getElementById('archiveData').textContent);
+// Parse archive data in a Web Worker so the main thread stays responsive
+(function() {
+  const raw = document.getElementById('archiveData').textContent;
+  const blob = new Blob(
+    ['onmessage=function(e){postMessage(JSON.parse(e.data));}'],
+    {type: 'application/javascript'}
+  );
+  const workerUrl = URL.createObjectURL(blob);
+  const worker = new Worker(workerUrl);
+  worker.onmessage = function(e) {
+    URL.revokeObjectURL(workerUrl);
+    worker.terminate();
+    DATA = e.data;
 
-  // Populate year filter
-  const years = [...new Set(DATA.map(g => g.date))].sort();
-  const sel = document.getElementById('yearFilter');
-  years.forEach(y => {
-    const o = document.createElement('option');
-    o.value = y; o.textContent = y;
-    sel.appendChild(o);
-  });
+    // Populate year filter
+    const years = [...new Set(DATA.map(g => g.date))].sort();
+    const sel = document.getElementById('yearFilter');
+    years.forEach(y => {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y;
+      sel.appendChild(o);
+    });
 
-  // Initial render
-  applyFilters();
-  document.getElementById('th-date').className = 'sorted-asc';
-}, 0);
+    // Initial render
+    applyFilters();
+    document.getElementById('th-date').className = 'sorted-asc';
+  };
+  worker.postMessage(raw);
+})();
 </script>
 
 <div id="helpModal" class="help-modal hidden">
