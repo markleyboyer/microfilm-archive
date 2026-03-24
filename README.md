@@ -59,6 +59,9 @@ Some groups span a date range (e.g. `1850-1860HomerAcademy`).
 |---|---|
 | `index.html` | The self-contained archive viewer (browse without cloning) |
 | `build_viewer.py` | Python script that regenerates `index.html` from the images folder |
+| `push_to_github.py` | Python script that pushes the rebuilt viewer to GitHub Pages |
+| `cloudflare_worker.js` | Cloudflare Worker source for shared rotation sync |
+| `rotations.json` | Shared rotation corrections contributed by all viewers |
 | `analyze_filenames.py` | Utility script to audit filenames and generate a summary report |
 | `report.csv` | Summary table of all academy/year groups and file counts |
 | `UPDATING.md` | Guide for adding new images and regenerating the viewer |
@@ -70,6 +73,7 @@ Some groups span a date range (e.g. `1850-1860HomerAcademy`).
 - **Viewer** — single self-contained HTML file with embedded JSON index, vanilla JavaScript, no dependencies
 - **Images** — hosted on [Cloudflare R2](https://developers.cloudflare.com/r2/) object storage (~$0.54/month, free egress)
 - **Hosting** — [GitHub Pages](https://pages.github.com/) (free)
+- **Rotation sync** — Cloudflare Worker writes shared `rotations.json` to GitHub; all visitors load the same corrections on page open
 - **Image processing** — Python with Pillow (planned: thumbnail generation, rotation export)
 
 ---
@@ -77,5 +81,6 @@ Some groups span a date range (e.g. `1850-1860HomerAcademy`).
 ## Planned Features
 
 - [ ] Generate small thumbnails for faster cloud browsing
+- [x] Shared rotation sync across all viewers (Cloudflare Worker + GitHub)
 - [ ] Export rotation corrections as a permanent fix to image files
 - [ ] AI transcription pipeline for handwritten text extraction
