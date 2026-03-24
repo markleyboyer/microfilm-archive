@@ -52,6 +52,18 @@
   .list-item-name { font-size: 0.85rem; color: #3d3020; cursor: pointer; flex: 1; }
   .list-item-name:hover { text-decoration: underline; }
   .no-results { padding: 40px; text-align: center; color: #9a8a6e; font-style: italic; }
+  /* Selection toolbar */
+  .group-toolbar { display: flex; align-items: center; gap: 7px; padding: 0 0 10px; flex-wrap: wrap; border-bottom: 1px solid #e0d9cc; margin-bottom: 12px; }
+  .group-toolbar.hidden { display: none; }
+  .sel-info { font-size: 0.83rem; color: #4a3c28; white-space: nowrap; margin-right: 2px; }
+  .tb-btn { padding: 5px 11px; border: 1px solid #b0a48a; background: #fffdf8; border-radius: 4px; cursor: pointer; font-size: 0.82rem; color: #4a3c28; font-family: inherit; white-space: nowrap; }
+  .tb-btn:hover { background: #ede8dc; }
+  .tb-btn.sel-all { border-color: #3d3020; color: #3d3020; }
+  .tb-btn.rot-sel { background: #3d3020; color: #f5f0e8; border-color: #3d3020; }
+  .tb-btn.rot-sel:hover { background: #52432e; }
+  .tb-btn.desel { color: #7a6e5a; }
+  .thumb-item.selected .thumb-img-wrap { box-shadow: 0 0 0 3px #4a7a4a; border-color: #4a7a4a; }
+  .thumb-item.selected .thumb-label { color: #4a7a4a; font-weight: bold; }
   /* Lightbox */
   .lightbox { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
   .lightbox.hidden { display: none; }
@@ -356,6 +368,32 @@ function loadFiles(cell, g) {
   cell.dataset.loaded = '1';
 
   if (viewMode === 'thumb') {
+    // ── Selection toolbar ──────────────────────────────────────────────────
+    const toolbar = document.createElement('div');
+    toolbar.className = 'group-toolbar hidden';
+    const info = document.createElement('span');
+    info.className = 'sel-info';
+    toolbar._info = info;
+
+    const btnSelAll  = document.createElement('button'); btnSelAll.className  = 'tb-btn sel-all'; btnSelAll.textContent = 'Select All';
+    const btnDesel   = document.createElement('button'); btnDesel.className   = 'tb-btn desel';   btnDesel.textContent  = 'Deselect All';
+    const btnRotL    = document.createElement('button'); btnRotL.className    = 'tb-btn rot-sel'; btnRotL.textContent   = '\u21ba Rotate Selected Left';
+    const btnRotR    = document.createElement('button'); btnRotR.className    = 'tb-btn rot-sel'; btnRotR.textContent   = '\u21bb Rotate Selected Right';
+
+    btnSelAll.addEventListener('click', () => { g.files.forEach(f => getSel(g).add(f)); updateSelUI(g, cell); });
+    btnDesel.addEventListener('click',  () => { getSel(g).clear(); updateSelUI(g, cell); });
+    btnRotL.addEventListener('click',   () => { getSel(g).forEach(f => rotate(f, -90)); });
+    btnRotR.addEventListener('click',   () => { getSel(g).forEach(f => rotate(f,  90)); });
+
+    toolbar.appendChild(info);
+    toolbar.appendChild(btnSelAll);
+    toolbar.appendChild(btnDesel);
+    toolbar.appendChild(btnRotL);
+    toolbar.appendChild(btnRotR);
+    cell._toolbar = toolbar;
+    cell.appendChild(toolbar);
+
+    // ── Thumbnails ─────────────────────────────────────────────────────────
     const wrap = document.createElement('div');
     wrap.className = 'thumbnails';
     g.files.forEach((f, idx) => {
@@ -364,11 +402,30 @@ function loadFiles(cell, g) {
 
       const item = document.createElement('div');
       item.className = 'thumb-item';
+      item.dataset.fname = f;
 
-      // Image wrapper — click opens lightbox
+      // Image wrapper — click opens lightbox or toggles selection
       const imgWrap = document.createElement('div');
       imgWrap.className = 'thumb-img-wrap';
-      imgWrap.addEventListener('click', () => openLightbox(g, idx));
+      imgWrap.addEventListener('click', e => {
+        if (e.ctrlKey || e.metaKey) {
+          // Ctrl/Cmd+click: toggle this image
+          const sel = getSel(g);
+          sel.has(f) ? sel.delete(f) : sel.add(f);
+          updateSelUI(g, cell);
+        } else if (e.shiftKey) {
+          // Shift+click: range select from last clicked
+          const sel  = getSel(g);
+          const last = lastClickIdx[gKey(g)];
+          const from = last !== undefined ? Math.min(last, idx) : 0;
+          const to   = last !== undefined ? Math.max(last, idx) : idx;
+          for (let i = from; i <= to; i++) sel.add(g.files[i]);
+          updateSelUI(g, cell);
+        } else {
+          openLightbox(g, idx);
+        }
+        lastClickIdx[gKey(g)] = idx;
+      });
 
       const img = document.createElement('img');
       img.src = url;
@@ -379,7 +436,7 @@ function loadFiles(cell, g) {
 
       const btns = document.createElement('div');
       btns.className = 'thumb-btns';
-      btns.appendChild(makeRotBtn('\u21ba', 'Rotate left', f, -90));
+      btns.appendChild(makeRotBtn('\u21ba', 'Rotate left',  f, -90));
       btns.appendChild(makeRotBtn('\u21bb', 'Rotate right', f,  90));
 
       imgWrap.appendChild(img);
@@ -448,7 +505,30 @@ function setView(mode) {
   });
 }
 
-// Rotation state — persisted in localStorage
+// ── Selection state ──────────────────────────────────────────────────────────
+const selections   = {}; // groupKey -> Set of filenames
+const lastClickIdx = {}; // groupKey -> index of last clicked thumb
+
+function gKey(g) { return g.date + '||' + g.name; }
+function getSel(g) {
+  const k = gKey(g);
+  if (!selections[k]) selections[k] = new Set();
+  return selections[k];
+}
+
+function updateSelUI(g, cell) {
+  const sel     = getSel(g);
+  const toolbar = cell._toolbar;
+  if (!toolbar) return;
+  const hasAny = sel.size > 0;
+  toolbar.classList.toggle('hidden', !hasAny);
+  if (hasAny) toolbar._info.textContent = sel.size + ' of ' + g.files.length + ' selected —';
+  cell.querySelectorAll('.thumb-item[data-fname]').forEach(item => {
+    item.classList.toggle('selected', sel.has(item.dataset.fname));
+  });
+}
+
+// ── Rotation state — persisted in localStorage
 const rotations = JSON.parse(localStorage.getItem('microfilm_rotations') || '{}');
 
 function getRotation(fname) { return rotations[fname] || 0; }
@@ -584,13 +664,18 @@ document.getElementById('th-date').className = 'sorted-asc';
       </ul>
 
       <h3>Rotating Images</h3>
-      <p>Some microfilm scans were filmed sideways and need to be rotated to read correctly. You can correct these in two ways:</p>
+      <p>Some microfilm scans were filmed sideways and need to be rotated to read correctly.</p>
+      <p><strong>Rotate a single image</strong> &mdash; hover over a thumbnail to reveal &#8634; / &#8635; buttons, or use the <strong>&#8634; CCW</strong> / <strong>&#8635; CW</strong> buttons in the lightbox (<kbd>L</kbd> / <kbd>R</kbd> keys also work).</p>
+      <p><strong>Rotate a whole group at once</strong> &mdash; use the <strong>&#8634; All</strong> / <strong>&#8635; All</strong> buttons in the lightbox to rotate every image in the current group in one click.</p>
+      <p><strong>Rotate a custom selection</strong> &mdash; in thumbnail view, select images first, then use the toolbar that appears above the group:</p>
       <ul>
-        <li><strong>In thumbnail view</strong> &mdash; hover over a thumbnail to reveal <strong>&#8634;</strong> (rotate left) and <strong>&#8635;</strong> (rotate right) buttons.</li>
-        <li><strong>In the lightbox</strong> &mdash; use the <strong>&#8634; CCW</strong> and <strong>&#8635; CW</strong> buttons in the control bar, or the <kbd>L</kbd> / <kbd>R</kbd> keys.</li>
+        <li><kbd>Ctrl</kbd> + click (or <kbd>Cmd</kbd> on Mac) &mdash; toggle individual images in or out of the selection</li>
+        <li><kbd>Shift</kbd> + click &mdash; select a range from the last clicked image to this one</li>
+        <li><strong>Select All</strong> &mdash; selects every image in the group</li>
+        <li><strong>Deselect All</strong> &mdash; clears the selection</li>
+        <li><strong>&#8634; Rotate Selected Left / &#8635; Rotate Selected Right</strong> &mdash; rotates only the selected images</li>
       </ul>
-      <div class="tip"><strong>Tip:</strong> If all images in a group are rotated the same way, open the lightbox on the first image, press <kbd>R</kbd> or <kbd>L</kbd> to correct it, then use <kbd>&rarr;</kbd> to advance and repeat. Rotations are saved instantly and will still be applied the next time you open the viewer.</div>
-      <p>Rotation corrections are stored in your browser&rsquo;s local storage (tied to this HTML file on this computer). They persist across sessions but are not shared with others. A future version will allow you to export and apply these corrections as a permanent fix to the image files.</p>
+      <div class="tip">Rotations are saved instantly to your browser and persist across sessions. A future update will let you export and permanently apply them to the image files.</div>
 
       <h3>Tips for Large Folders</h3>
       <ul>
@@ -613,6 +698,8 @@ document.getElementById('th-date').className = 'sorted-asc';
       <button class="lb-btn" id="lb-prev" onclick="lbNav(-1)">&#8592; Prev</button>
       <button class="lb-btn" onclick="rotate(lb.group.files[lb.idx], -90)" title="Rotate left (L)">&#8634; CCW</button>
       <button class="lb-btn" onclick="rotate(lb.group.files[lb.idx],  90)" title="Rotate right (R)">&#8635; CW</button>
+      <button class="lb-btn" onclick="lb.group.files.forEach(f=>rotate(f,-90))" title="Rotate every image in this group left">&#8634; All</button>
+      <button class="lb-btn" onclick="lb.group.files.forEach(f=>rotate(f, 90))" title="Rotate every image in this group right">&#8635; All</button>
       <span class="lb-counter" id="lb-counter"></span>
       <button class="lb-btn" id="lb-next" onclick="lbNav(1)">Next &#8594;</button>
       <button class="lb-btn close" onclick="closeLightbox()">&#10005; Close</button>
