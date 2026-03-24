@@ -111,6 +111,33 @@ To get new R2 credentials:
 
 ---
 
+## Cloudflare Worker (Rotation Sync)
+
+Rotation corrections made by any viewer are saved to `rotations.json` in the GitHub repository via a Cloudflare Worker. All visitors load these corrections automatically when the page opens.
+
+| | |
+|---|---|
+| **Worker name** | `microfilm-rotations` |
+| **Worker URL** | `https://microfilm-rotations.square-star-6696.workers.dev` |
+| **Source** | `cloudflare_worker.js` in this folder |
+
+### Updating the Worker
+
+If you need to redeploy or modify the worker:
+
+1. Log in to [dash.cloudflare.com](https://dash.cloudflare.com) → Workers & Pages
+2. Open the `microfilm-rotations` worker
+3. Edit the code (paste from `cloudflare_worker.js`) and click **Save & Deploy**
+4. The `GITHUB_TOKEN` secret (classic PAT, `repo` scope) must be set under **Settings → Variables & Secrets**
+
+### Rotation Data
+
+- Rotations are stored as `rotations.json` in the `markleyboyer/microfilm-archive` repository
+- Keys are filenames (e.g. `IMG_0001_1829FairfieldAcademy.JPG`), values are degrees (`90`, `180`, `270`)
+- Entries with value `0` are automatically removed to keep the file tidy
+
+---
+
 ## Cloudflare R2 Details
 
 | | |
