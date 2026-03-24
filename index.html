@@ -121,6 +121,7 @@
     <button id="btnList" onclick="setView('list')">List</button>
   </div>
   <span class="stats" id="stats"></span>
+  <span id="syncStatus" style="font-size:0.82rem;min-width:80px;text-align:right"></span>
   <button class="help-btn" onclick="document.getElementById('helpModal').classList.remove('hidden')" title="User guide">?</button>
 </div>
 <table id="mainTable">
@@ -544,14 +545,54 @@ function updateSelUI(g, cell) {
   });
 }
 
-// ── Rotation state — persisted in localStorage
-const rotations = JSON.parse(localStorage.getItem('microfilm_rotations') || '{}');
+// ── Rotation state — synced to GitHub via Cloudflare Worker ─────────────────
+const WORKER_URL = 'https://microfilm-rotations.square-star-6696.workers.dev';
+const rotations  = {};
+let   pushTimer  = null;
+
+// Load rotations from GitHub on page load
+(async function loadRotations() {
+  try {
+    const resp = await fetch('https://raw.githubusercontent.com/markleyboyer/microfilm-archive/main/rotations.json?t=' + Date.now());
+    if (resp.ok) {
+      const data = await resp.json();
+      Object.assign(rotations, data);
+      // Apply to any images already visible
+      document.querySelectorAll('img[data-fname]').forEach(applyImgRotation);
+    }
+  } catch(e) { /* rotations.json not created yet — that's fine */ }
+})();
+
+function setSyncStatus(msg, color) {
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = color;
+  if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 3000);
+}
+
+function schedulePush() {
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(async () => {
+    setSyncStatus('Saving…', '#6b5e45');
+    try {
+      const resp = await fetch(WORKER_URL + '/rotations', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(rotations),
+      });
+      if (resp.ok) setSyncStatus('Saved ✓', '#4a7a4a');
+      else         setSyncStatus('Save failed', '#8b3030');
+    } catch(e) {   setSyncStatus('Save failed', '#8b3030'); }
+  }, 1500);
+}
 
 function getRotation(fname) { return rotations[fname] || 0; }
 
 function rotate(fname, delta) {
   rotations[fname] = ((getRotation(fname) + delta) + 360) % 360;
-  localStorage.setItem('microfilm_rotations', JSON.stringify(rotations));
+  if (rotations[fname] === 0) delete rotations[fname];
+  schedulePush();
   // Update all visible thumbnail/list images for this file
   document.querySelectorAll('img[data-fname]').forEach(img => {
     if (img.dataset.fname === fname) applyImgRotation(img);
