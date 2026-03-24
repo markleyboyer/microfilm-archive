@@ -17,7 +17,7 @@
   .view-toggle { display: flex; gap: 4px; }
   .view-toggle button { padding: 7px 12px; border: 1px solid #b0a48a; background: #fffdf8; border-radius: 4px; cursor: pointer; font-size: 0.85rem; color: #4a3c28; font-family: inherit; }
   .view-toggle button.active { background: #3d3020; color: #f5f0e8; border-color: #3d3020; }
-  table { width: 100%; border-collapse: collapse; }
+  table { width: auto; border-collapse: collapse; }
   thead th { background: #3d3020; color: #f5f0e8; padding: 11px 16px; text-align: left; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: normal; cursor: pointer; user-select: none; }
   thead th:hover { background: #52432e; }
   thead th.sorted-asc::after { content: " ▲"; }
@@ -26,8 +26,8 @@
   tbody tr.group-row:hover { background: #ede8dc; }
   tbody tr.group-row.expanded { background: #e5dfc9; }
   tbody tr.group-row td { padding: 10px 16px; font-size: 0.92rem; }
-  td.count { text-align: right; color: #6b5e45; font-size: 0.85rem; }
-  td.date-col { font-variant-numeric: tabular-nums; color: #4a3c28; }
+  td.count { text-align: right; color: #6b5e45; font-size: 0.85rem; white-space: nowrap; width: 1%; }
+  td.date-col { font-variant-numeric: tabular-nums; color: #4a3c28; white-space: nowrap; width: 1%; }
   td.chevron { width: 28px; color: #9a8a6e; font-size: 0.75rem; transition: transform 0.2s; }
   tr.expanded td.chevron { transform: rotate(90deg); display: inline-block; }
   tr.files-row { display: none; background: #f8f4ec; }
@@ -117,8 +117,8 @@
     <tr>
       <th style="width:28px;cursor:default"></th>
       <th onclick="sortBy('name')" id="th-name">Academy</th>
-      <th onclick="sortBy('date')" id="th-date">Year</th>
-      <th onclick="sortBy('count')" id="th-count" style="text-align:right">Files</th>
+      <th onclick="sortBy('date')" id="th-date" style="white-space:nowrap;width:1%">Year</th>
+      <th onclick="sortBy('count')" id="th-count" style="text-align:right;white-space:nowrap;width:1%">Files</th>
     </tr>
   </thead>
   <tbody id="tbody"></tbody>
