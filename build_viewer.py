@@ -43,7 +43,7 @@ html = """<!DOCTYPE html>
   .view-toggle { display: flex; gap: 4px; }
   .view-toggle button { padding: 7px 12px; border: 1px solid #b0a48a; background: #fffdf8; border-radius: 4px; cursor: pointer; font-size: 0.85rem; color: #4a3c28; font-family: inherit; }
   .view-toggle button.active { background: #3d3020; color: #f5f0e8; border-color: #3d3020; }
-  table { width: 100%; border-collapse: collapse; }
+  table { width: auto; border-collapse: collapse; }
   thead th { background: #3d3020; color: #f5f0e8; padding: 11px 16px; text-align: left; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: normal; cursor: pointer; user-select: none; }
   thead th:hover { background: #52432e; }
   thead th.sorted-asc::after { content: " \u25b2"; }
@@ -52,8 +52,8 @@ html = """<!DOCTYPE html>
   tbody tr.group-row:hover { background: #ede8dc; }
   tbody tr.group-row.expanded { background: #e5dfc9; }
   tbody tr.group-row td { padding: 10px 16px; font-size: 0.92rem; }
-  td.count { text-align: right; color: #6b5e45; font-size: 0.85rem; }
-  td.date-col { font-variant-numeric: tabular-nums; color: #4a3c28; }
+  td.count { text-align: right; color: #6b5e45; font-size: 0.85rem; white-space: nowrap; width: 1%; }
+  td.date-col { font-variant-numeric: tabular-nums; color: #4a3c28; white-space: nowrap; width: 1%; }
   td.chevron { width: 28px; color: #9a8a6e; font-size: 0.75rem; transition: transform 0.2s; }
   tr.expanded td.chevron { transform: rotate(90deg); display: inline-block; }
   tr.files-row { display: none; background: #f8f4ec; }
@@ -78,6 +78,17 @@ html = """<!DOCTYPE html>
   .list-item-name { font-size: 0.85rem; color: #3d3020; cursor: pointer; flex: 1; }
   .list-item-name:hover { text-decoration: underline; }
   .no-results { padding: 40px; text-align: center; color: #9a8a6e; font-style: italic; }
+  /* Selection toolbar */
+  .group-toolbar { display: flex; align-items: center; gap: 7px; padding: 0 0 10px; flex-wrap: wrap; border-bottom: 1px solid #e0d9cc; margin-bottom: 12px; }
+  .sel-info { font-size: 0.83rem; color: #4a3c28; white-space: nowrap; margin-right: 2px; }
+  .tb-btn { padding: 5px 11px; border: 1px solid #b0a48a; background: #fffdf8; border-radius: 4px; cursor: pointer; font-size: 0.82rem; color: #4a3c28; font-family: inherit; white-space: nowrap; }
+  .tb-btn:hover { background: #ede8dc; }
+  .tb-btn.sel-all { border-color: #3d3020; color: #3d3020; }
+  .tb-btn.rot-sel { background: #3d3020; color: #f5f0e8; border-color: #3d3020; }
+  .tb-btn.rot-sel:hover { background: #52432e; }
+  .tb-btn.desel { color: #7a6e5a; }
+  .thumb-item.selected .thumb-img-wrap { box-shadow: 0 0 0 3px #4a7a4a; border-color: #4a7a4a; }
+  .thumb-item.selected .thumb-label { color: #4a7a4a; font-weight: bold; }
   /* Lightbox */
   .lightbox { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
   .lightbox.hidden { display: none; }
@@ -136,6 +147,7 @@ html = """<!DOCTYPE html>
     <button id="btnList" onclick="setView('list')">List</button>
   </div>
   <span class="stats" id="stats"></span>
+  <span id="syncStatus" style="font-size:0.82rem;min-width:80px;text-align:right"></span>
   <button class="help-btn" onclick="document.getElementById('helpModal').classList.remove('hidden')" title="User guide">?</button>
 </div>
 <table id="mainTable">
@@ -143,16 +155,18 @@ html = """<!DOCTYPE html>
     <tr>
       <th style="width:28px;cursor:default"></th>
       <th onclick="sortBy('name')" id="th-name">Academy</th>
-      <th onclick="sortBy('date')" id="th-date">Year</th>
-      <th onclick="sortBy('count')" id="th-count" style="text-align:right">Files</th>
+      <th onclick="sortBy('date')" id="th-date" style="white-space:nowrap;width:1%">Year</th>
+      <th onclick="sortBy('count')" id="th-count" style="text-align:right;white-space:nowrap;width:1%">Files</th>
     </tr>
   </thead>
   <tbody id="tbody"></tbody>
 </table>
 <div id="noResults" class="no-results" style="display:none">No matching records found.</div>
 
+<script type="application/json" id="archiveData">""" + data_json + """</script>
+
 <script>
-const DATA = """ + data_json + """;
+let DATA = [];
 const R2_BASE = 'https://pub-e96a83f726634e6a8bac05a0641d11fe.r2.dev/images/';
 
 let currentSort = { key: 'date', dir: 1 };
@@ -289,14 +303,7 @@ async function pickFolder() {
   } catch (e) { /* no stored handle or IDB error — ignore */ }
 })();
 
-// Populate year filter
-const years = [...new Set(DATA.map(g => g.date))].sort();
-const sel = document.getElementById('yearFilter');
-years.forEach(y => {
-  const o = document.createElement('option');
-  o.value = y; o.textContent = y;
-  sel.appendChild(o);
-});
+// Year filter populated after data loads (see deferred init below)
 
 function fileUrl(fname) {
   return fileMap[fname] || R2_BASE + encodeURIComponent(fname);
@@ -382,6 +389,49 @@ function loadFiles(cell, g) {
   cell.dataset.loaded = '1';
 
   if (viewMode === 'thumb') {
+    // ── Toolbar (always visible) ───────────────────────────────────────────
+    const toolbar = document.createElement('div');
+    toolbar.className = 'group-toolbar';
+
+    // Rotate All buttons — always shown
+    const btnRotAllL = document.createElement('button'); btnRotAllL.className = 'tb-btn rot-sel'; btnRotAllL.textContent = '\\u21ba Rotate All Left';
+    const btnRotAllR = document.createElement('button'); btnRotAllR.className = 'tb-btn rot-sel'; btnRotAllR.textContent = '\\u21bb Rotate All Right';
+    btnRotAllL.addEventListener('click', () => g.files.forEach(f => rotate(f, -90)));
+    btnRotAllR.addEventListener('click', () => g.files.forEach(f => rotate(f,  90)));
+
+    // Divider
+    const div1 = document.createElement('span');
+    div1.style.cssText = 'border-left:1px solid #c8bfa8;height:1.2em;margin:0 2px';
+
+    // Selection buttons — shown only when something is selected
+    const info      = document.createElement('span');       info.className      = 'sel-info';
+    const btnSelAll = document.createElement('button');     btnSelAll.className = 'tb-btn sel-all'; btnSelAll.textContent = 'Select All';
+    const btnDesel  = document.createElement('button');     btnDesel.className  = 'tb-btn desel';   btnDesel.textContent  = 'Deselect All';
+    const btnRotL   = document.createElement('button');     btnRotL.className   = 'tb-btn rot-sel'; btnRotL.textContent   = '\\u21ba Rotate Selected';
+    const btnRotR   = document.createElement('button');     btnRotR.className   = 'tb-btn rot-sel'; btnRotR.textContent   = '\\u21bb Rotate Selected';
+    const selGroup  = [info, btnDesel, btnRotL, btnRotR];
+    selGroup.forEach(el => { el.classList.add('sel-only'); el.style.display = 'none'; });
+
+    btnSelAll.addEventListener('click', () => { g.files.forEach(f => getSel(g).add(f)); updateSelUI(g, cell); });
+    btnDesel.addEventListener('click',  () => { getSel(g).clear(); updateSelUI(g, cell); });
+    btnRotL.addEventListener('click',   () => getSel(g).forEach(f => rotate(f, -90)));
+    btnRotR.addEventListener('click',   () => getSel(g).forEach(f => rotate(f,  90)));
+
+    toolbar._info     = info;
+    toolbar._selGroup = selGroup;
+
+    toolbar.appendChild(btnRotAllL);
+    toolbar.appendChild(btnRotAllR);
+    toolbar.appendChild(div1);
+    toolbar.appendChild(btnSelAll);
+    toolbar.appendChild(info);
+    toolbar.appendChild(btnDesel);
+    toolbar.appendChild(btnRotL);
+    toolbar.appendChild(btnRotR);
+    cell._toolbar = toolbar;
+    cell.appendChild(toolbar);
+
+    // ── Thumbnails ─────────────────────────────────────────────────────────
     const wrap = document.createElement('div');
     wrap.className = 'thumbnails';
     g.files.forEach((f, idx) => {
@@ -390,11 +440,30 @@ function loadFiles(cell, g) {
 
       const item = document.createElement('div');
       item.className = 'thumb-item';
+      item.dataset.fname = f;
 
-      // Image wrapper — click opens lightbox
+      // Image wrapper — click opens lightbox or toggles selection
       const imgWrap = document.createElement('div');
       imgWrap.className = 'thumb-img-wrap';
-      imgWrap.addEventListener('click', () => openLightbox(g, idx));
+      imgWrap.addEventListener('click', e => {
+        if (e.ctrlKey || e.metaKey) {
+          // Ctrl/Cmd+click: toggle this image
+          const sel = getSel(g);
+          sel.has(f) ? sel.delete(f) : sel.add(f);
+          updateSelUI(g, cell);
+        } else if (e.shiftKey) {
+          // Shift+click: range select from last clicked
+          const sel  = getSel(g);
+          const last = lastClickIdx[gKey(g)];
+          const from = last !== undefined ? Math.min(last, idx) : 0;
+          const to   = last !== undefined ? Math.max(last, idx) : idx;
+          for (let i = from; i <= to; i++) sel.add(g.files[i]);
+          updateSelUI(g, cell);
+        } else {
+          openLightbox(g, idx);
+        }
+        lastClickIdx[gKey(g)] = idx;
+      });
 
       const img = document.createElement('img');
       img.src = url;
@@ -405,7 +474,7 @@ function loadFiles(cell, g) {
 
       const btns = document.createElement('div');
       btns.className = 'thumb-btns';
-      btns.appendChild(makeRotBtn('\\u21ba', 'Rotate left', f, -90));
+      btns.appendChild(makeRotBtn('\\u21ba', 'Rotate left',  f, -90));
       btns.appendChild(makeRotBtn('\\u21bb', 'Rotate right', f,  90));
 
       imgWrap.appendChild(img);
@@ -474,14 +543,77 @@ function setView(mode) {
   });
 }
 
-// Rotation state — persisted in localStorage
-const rotations = JSON.parse(localStorage.getItem('microfilm_rotations') || '{}');
+// ── Selection state ──────────────────────────────────────────────────────────
+const selections   = {}; // groupKey -> Set of filenames
+const lastClickIdx = {}; // groupKey -> index of last clicked thumb
+
+function gKey(g) { return g.date + '||' + g.name; }
+function getSel(g) {
+  const k = gKey(g);
+  if (!selections[k]) selections[k] = new Set();
+  return selections[k];
+}
+
+function updateSelUI(g, cell) {
+  const sel     = getSel(g);
+  const toolbar = cell._toolbar;
+  if (!toolbar) return;
+  const hasAny  = sel.size > 0;
+  toolbar._selGroup.forEach(el => el.style.display = hasAny ? '' : 'none');
+  if (hasAny) toolbar._info.textContent = sel.size + ' of ' + g.files.length + ' selected \u2014';
+  cell.querySelectorAll('.thumb-item[data-fname]').forEach(item => {
+    item.classList.toggle('selected', sel.has(item.dataset.fname));
+  });
+}
+
+// ── Rotation state — synced to GitHub via Cloudflare Worker ─────────────────
+const WORKER_URL = 'https://microfilm-rotations.square-star-6696.workers.dev';
+const rotations  = {};
+let   pushTimer  = null;
+
+// Load rotations from GitHub on page load
+(async function loadRotations() {
+  try {
+    const resp = await fetch('https://raw.githubusercontent.com/markleyboyer/microfilm-archive/main/rotations.json?t=' + Date.now());
+    if (resp.ok) {
+      const data = await resp.json();
+      Object.assign(rotations, data);
+      // Apply to any images already visible
+      document.querySelectorAll('img[data-fname]').forEach(applyImgRotation);
+    }
+  } catch(e) { /* rotations.json not created yet — that's fine */ }
+})();
+
+function setSyncStatus(msg, color) {
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = color;
+  if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 3000);
+}
+
+function schedulePush() {
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(async () => {
+    setSyncStatus('Saving\u2026', '#6b5e45');
+    try {
+      const resp = await fetch(WORKER_URL + '/rotations', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(rotations),
+      });
+      if (resp.ok) setSyncStatus('Saved \u2713', '#4a7a4a');
+      else         setSyncStatus('Save failed', '#8b3030');
+    } catch(e) {   setSyncStatus('Save failed', '#8b3030'); }
+  }, 1500);
+}
 
 function getRotation(fname) { return rotations[fname] || 0; }
 
 function rotate(fname, delta) {
   rotations[fname] = ((getRotation(fname) + delta) + 360) % 360;
-  localStorage.setItem('microfilm_rotations', JSON.stringify(rotations));
+  if (rotations[fname] === 0) delete rotations[fname];
+  schedulePush();
   // Update all visible thumbnail/list images for this file
   document.querySelectorAll('img[data-fname]').forEach(img => {
     if (img.dataset.fname === fname) applyImgRotation(img);
@@ -533,7 +665,7 @@ function lbNav(delta) {
 function updateLightbox() {
   const f   = lb.group.files[lb.idx];
   const img = document.getElementById('lb-img');
-  img.src            = fileMap[f] || '';
+  img.src            = fileUrl(f);
   img.dataset.fname  = f;
   applyLbRotation(img);
   document.getElementById('lb-label').textContent   = f;
@@ -557,9 +689,23 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'l' || e.key === 'L') rotate(lb.group.files[lb.idx], -90);
 });
 
-// Initial render
-applyFilters();
-document.getElementById('th-date').className = 'sorted-asc';
+// Deferred init — parse data after page has rendered to avoid blocking the UI
+setTimeout(() => {
+  DATA = JSON.parse(document.getElementById('archiveData').textContent);
+
+  // Populate year filter
+  const years = [...new Set(DATA.map(g => g.date))].sort();
+  const sel = document.getElementById('yearFilter');
+  years.forEach(y => {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    sel.appendChild(o);
+  });
+
+  // Initial render
+  applyFilters();
+  document.getElementById('th-date').className = 'sorted-asc';
+}, 0);
 </script>
 
 <div id="helpModal" class="help-modal hidden">
@@ -610,13 +756,18 @@ document.getElementById('th-date').className = 'sorted-asc';
       </ul>
 
       <h3>Rotating Images</h3>
-      <p>Some microfilm scans were filmed sideways and need to be rotated to read correctly. You can correct these in two ways:</p>
+      <p>Some microfilm scans were filmed sideways and need to be rotated to read correctly.</p>
+      <p><strong>Rotate a single image</strong> &mdash; hover over a thumbnail to reveal &#8634; / &#8635; buttons, or use the <strong>&#8634; CCW</strong> / <strong>&#8635; CW</strong> buttons in the lightbox (<kbd>L</kbd> / <kbd>R</kbd> keys also work).</p>
+      <p><strong>Rotate a whole group at once</strong> &mdash; use the <strong>&#8634; All</strong> / <strong>&#8635; All</strong> buttons in the lightbox to rotate every image in the current group in one click.</p>
+      <p><strong>Rotate a custom selection</strong> &mdash; in thumbnail view, select images first, then use the toolbar that appears above the group:</p>
       <ul>
-        <li><strong>In thumbnail view</strong> &mdash; hover over a thumbnail to reveal <strong>&#8634;</strong> (rotate left) and <strong>&#8635;</strong> (rotate right) buttons.</li>
-        <li><strong>In the lightbox</strong> &mdash; use the <strong>&#8634; CCW</strong> and <strong>&#8635; CW</strong> buttons in the control bar, or the <kbd>L</kbd> / <kbd>R</kbd> keys.</li>
+        <li><kbd>Ctrl</kbd> + click (or <kbd>Cmd</kbd> on Mac) &mdash; toggle individual images in or out of the selection</li>
+        <li><kbd>Shift</kbd> + click &mdash; select a range from the last clicked image to this one</li>
+        <li><strong>Select All</strong> &mdash; selects every image in the group</li>
+        <li><strong>Deselect All</strong> &mdash; clears the selection</li>
+        <li><strong>&#8634; Rotate Selected Left / &#8635; Rotate Selected Right</strong> &mdash; rotates only the selected images</li>
       </ul>
-      <div class="tip"><strong>Tip:</strong> If all images in a group are rotated the same way, open the lightbox on the first image, press <kbd>R</kbd> or <kbd>L</kbd> to correct it, then use <kbd>&rarr;</kbd> to advance and repeat. Rotations are saved instantly and will still be applied the next time you open the viewer.</div>
-      <p>Rotation corrections are stored in your browser&rsquo;s local storage (tied to this HTML file on this computer). They persist across sessions but are not shared with others. A future version will allow you to export and apply these corrections as a permanent fix to the image files.</p>
+      <div class="tip">Rotations are saved instantly to your browser and persist across sessions. A future update will let you export and permanently apply them to the image files.</div>
 
       <h3>Tips for Large Folders</h3>
       <ul>
