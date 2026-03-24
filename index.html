@@ -507,7 +507,7 @@ function lbNav(delta) {
 function updateLightbox() {
   const f   = lb.group.files[lb.idx];
   const img = document.getElementById('lb-img');
-  img.src            = fileMap[f] || '';
+  img.src            = fileUrl(f);
   img.dataset.fname  = f;
   applyLbRotation(img);
   document.getElementById('lb-label').textContent   = f;
