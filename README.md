@@ -47,8 +47,9 @@ Some groups span a date range (e.g. `1850-1860HomerAcademy`).
 - **Sort** by clicking any column header
 - **Click a row** to expand it and view the images for that group
 - **Click any image** to open the full-size lightbox viewer
+- **Zoom** in the lightbox using the mouse wheel, `+`/`-` buttons, or click the image; drag to pan when zoomed in
 - **Rotate images** using the ↺ ↻ buttons — corrections are saved automatically
-- **Keyboard shortcuts** in the lightbox: `←` `→` to navigate, `R`/`L` to rotate, `Esc` to close
+- **Keyboard shortcuts** in the lightbox: `←` `→` to navigate, `R`/`L` to rotate, `+`/`-`/`0` to zoom, `Esc` to close
 - Click **?** in the toolbar for the full user guide
 
 ---
@@ -60,6 +61,7 @@ Some groups span a date range (e.g. `1850-1860HomerAcademy`).
 | `index.html` | The self-contained archive viewer (browse without cloning) |
 | `build_viewer.py` | Python script that regenerates `index.html` from the images folder |
 | `push_to_github.py` | Python script that pushes the rebuilt viewer to GitHub Pages |
+| `generate_thumbs.py` | Python script that generates 300px thumbnails from the images folder |
 | `cloudflare_worker.js` | Cloudflare Worker source for shared rotation sync |
 | `rotations.json` | Shared rotation corrections contributed by all viewers |
 | `analyze_filenames.py` | Utility script to audit filenames and generate a summary report |
@@ -72,15 +74,16 @@ Some groups span a date range (e.g. `1850-1860HomerAcademy`).
 
 - **Viewer** — single self-contained HTML file with embedded JSON index, vanilla JavaScript, no dependencies
 - **Images** — hosted on [Cloudflare R2](https://developers.cloudflare.com/r2/) object storage (~$0.54/month, free egress)
+- **Thumbnails** — 300px JPEGs served from R2 `/thumbs/`; full-size originals load only in the lightbox
 - **Hosting** — [GitHub Pages](https://pages.github.com/) (free)
 - **Rotation sync** — Cloudflare Worker writes shared `rotations.json` to GitHub; all visitors load the same corrections on page open
-- **Image processing** — Python with Pillow (planned: thumbnail generation, rotation export)
+- **Image processing** — Python with Pillow for thumbnail generation
 
 ---
 
 ## Planned Features
 
-- [ ] Generate small thumbnails for faster cloud browsing
+- [x] Generate small thumbnails for faster cloud browsing
 - [x] Shared rotation sync across all viewers (Cloudflare Worker + GitHub)
 - [ ] Export rotation corrections as a permanent fix to image files
 - [ ] AI transcription pipeline for handwritten text extraction
