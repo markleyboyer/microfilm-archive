@@ -421,16 +421,33 @@ function loadFiles(cell, g) {
     cell._toolbar = toolbar;
     cell.appendChild(toolbar);
 
-    // ── Thumbnails — built in batches to keep the page responsive ──────────
+    // ── Thumbnails ──────────────────────────────────────────────────────────
+    // Images are queued and loaded 4 at a time so the browser never decodes
+    // dozens of images simultaneously, which was freezing the UI.
+    const imgQueue = [];
+    let activeLoads = 0;
+    const MAX_LOADS = 4;
+    function enqueueImg(img, src) {
+      imgQueue.push({img, src});
+      flushImgQueue();
+    }
+    function flushImgQueue() {
+      while (activeLoads < MAX_LOADS && imgQueue.length) {
+        const {img, src} = imgQueue.shift();
+        activeLoads++;
+        img.onload = img.onerror = function() { activeLoads--; flushImgQueue(); };
+        img.src = src;
+      }
+    }
+
     const wrap = document.createElement('div');
     wrap.className = 'thumbnails';
     cell.appendChild(wrap);
 
-    const BATCH = 20;
     let bi = 0;
     function addThumbBatch() {
       const frag = document.createDocumentFragment();
-      for (let end = Math.min(bi + BATCH, g.files.length); bi < end; bi++) {
+      for (let end = Math.min(bi + 20, g.files.length); bi < end; bi++) {
         const f   = g.files[bi];
         const idx = bi;
         const label = f.replace(/^IMG_\d+ ?(\(\d+\))?_/, '').replace('.JPG', '');
@@ -460,11 +477,10 @@ function loadFiles(cell, g) {
         });
 
         const img = document.createElement('img');
-        img.loading = 'lazy';
         img.dataset.fname = f;
         img.alt = f;
-        img.src = thumbUrl(f);
         applyImgRotation(img);
+        enqueueImg(img, thumbUrl(f));  // load via queue, not immediately
 
         const btns = document.createElement('div');
         btns.className = 'thumb-btns';
