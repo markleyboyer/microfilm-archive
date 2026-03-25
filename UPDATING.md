@@ -50,15 +50,24 @@ python build_viewer.py
 
 This scans the `images\` folder, rebuilds the JSON index, and writes a new `archive_viewer.html`.
 
-### 4. Upload new images to Cloudflare R2
+### 4. Generate thumbnails
+
+```powershell
+python generate_thumbs.py
+```
+
+This creates 300px JPEG thumbnails in the `thumbs\` folder. Skips files already generated — safe to re-run.
+
+### 5. Upload new images and thumbnails to Cloudflare R2
 
 ```powershell
 rclone copy "images" r2:meteorologicalobservations/images --progress --transfers 8
+rclone copy "thumbs" r2:meteorologicalobservations/thumbs --progress --transfers 8
 ```
 
 rclone skips files already uploaded — only new files are transferred.
 
-### 5. Upload the updated viewer to GitHub
+### 6. Upload the updated viewer to GitHub
 
 ```powershell
 python push_to_github.py
@@ -145,6 +154,7 @@ If you need to redeploy or modify the worker:
 | **Bucket** | `meteorologicalobservations` |
 | **Public URL** | `https://pub-e96a83f726634e6a8bac05a0641d11fe.r2.dev` |
 | **Images path** | `/images/` |
+| **Thumbnails path** | `/thumbs/` |
 | **Estimated cost** | ~$0.54/month storage, free egress |
 
 ---
