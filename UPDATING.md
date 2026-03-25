@@ -62,7 +62,7 @@ This creates 300px JPEG thumbnails in the `thumbs\` folder. Skips files already 
 
 ```powershell
 rclone copy "images" r2:meteorologicalobservations/images --progress --transfers 8
-rclone copy "thumbs" r2:meteorologicalobservations/thumbs --progress --transfers 8
+rclone copy "thumbs" r2:meteorologicalobservations/thumbs --progress --transfers 8 --header-upload "Cache-Control: public, max-age=604800"
 ```
 
 rclone skips files already uploaded — only new files are transferred.
