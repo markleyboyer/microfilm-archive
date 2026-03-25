@@ -29,7 +29,7 @@ html = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Farmscape Weather Data - Microfilm Archive v3.2</title>
+<title>Farmscape Weather Data - Microfilm Archive v3.3</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Georgia, serif; background: #f5f0e8; color: #2c2416; }
@@ -133,7 +133,7 @@ html = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>Farmscape Weather Data &mdash; Microfilm Archive <span style="font-size:0.65em;opacity:0.55;font-style:italic">v3.2</span></h1>
+  <h1>Farmscape Weather Data &mdash; Microfilm Archive <span style="font-size:0.65em;opacity:0.55;font-style:italic">v3.3</span></h1>
   <p>New York Academy Reports &bull; 1827&ndash;1860 &bull; Click any row to browse its files</p>
 </header>
 <div class="controls">
@@ -175,6 +175,22 @@ const R2_THUMBS = 'https://pub-e96a83f726634e6a8bac05a0641d11fe.r2.dev/thumbs/';
 let currentSort = { key: 'date', dir: 1 };
 let viewMode = 'thumb';
 const fileMap = {};
+
+// ── Lazy image loading via IntersectionObserver ───────────────────────────────
+// Images get data-src set during DOM creation; src is only set when they
+// scroll into (or near) the viewport. Prevents burst-loading all images at once.
+const thumbObserver = new IntersectionObserver(function(entries) {
+  entries.forEach(function(entry) {
+    if (entry.isIntersecting) {
+      const img = entry.target;
+      if (img.dataset.lazySrc) {
+        img.src = img.dataset.lazySrc;
+        delete img.dataset.lazySrc;
+        thumbObserver.unobserve(img);
+      }
+    }
+  });
+}, { rootMargin: '300px' }); // pre-load 300px before visible
 
 // ── IndexedDB helpers ────────────────────────────────────────────────────────
 function openDB() {
@@ -485,11 +501,10 @@ function loadFiles(cell, g) {
         });
 
         const img = document.createElement('img');
-        img.loading = 'lazy';
-        img.decoding = 'async';
         img.dataset.fname = f;
         img.alt = f;
-        img.src = thumbUrl(f);
+        img.dataset.lazySrc = thumbUrl(f);
+        thumbObserver.observe(img);
         applyImgRotation(img);
 
         const btns = document.createElement('div');
@@ -534,11 +549,10 @@ function loadFiles(cell, g) {
         imgWrap.addEventListener('click', () => openLightbox(g, idx));
 
         const img = document.createElement('img');
-        img.loading = 'lazy';
-        img.decoding = 'async';
         img.dataset.fname = f;
         img.alt = f;
-        img.src = thumbUrl(f);
+        img.dataset.lazySrc = thumbUrl(f);
+        thumbObserver.observe(img);
         applyImgRotation(img);
         imgWrap.appendChild(img);
 
