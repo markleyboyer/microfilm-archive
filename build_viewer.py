@@ -719,15 +719,16 @@ document.addEventListener('keydown', e => {
   else if (e.key === '0')                  { lbZoom = 1; lbPanX = 0; lbPanY = 0; applyLbRotation(document.getElementById('lb-img')); }
 });
 
-// Wheel to zoom in lightbox
-document.getElementById('lightbox').addEventListener('wheel', function(e) {
-  if (this.classList.contains('hidden')) return;
-  e.preventDefault();
-  lbZoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12);
-}, { passive: false });
+// Wheel zoom and drag-to-pan — registered after DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+  // Wheel to zoom
+  document.getElementById('lightbox').addEventListener('wheel', function(e) {
+    if (this.classList.contains('hidden')) return;
+    e.preventDefault();
+    lbZoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12);
+  }, { passive: false });
 
-// Drag to pan when zoomed
-(function() {
+  // Drag to pan when zoomed
   const lightbox = document.getElementById('lightbox');
   let dragging = false, startX, startY, startPanX, startPanY;
   lightbox.addEventListener('mousedown', function(e) {
@@ -749,14 +750,15 @@ document.getElementById('lightbox').addEventListener('wheel', function(e) {
     dragging = false;
     document.querySelector('.lb-img-wrap').classList.remove('dragging');
   });
-  // Click image to toggle zoom when not dragging
+  // Click image to toggle zoom (only if not a drag)
   document.querySelector('.lb-img-wrap').addEventListener('click', function(e) {
     if (e.target.tagName === 'BUTTON') return;
     if (Math.abs(lbPanX - (startPanX || 0)) < 5 && Math.abs(lbPanY - (startPanY || 0)) < 5) {
-      lbZoom === 1 ? lbZoomBy(2) : (function(){ lbZoom=1; lbPanX=0; lbPanY=0; applyLbRotation(document.getElementById('lb-img')); })();
+      if (lbZoom === 1) { lbZoomBy(2); }
+      else { lbZoom = 1; lbPanX = 0; lbPanY = 0; applyLbRotation(document.getElementById('lb-img')); }
     }
   });
-})();
+});
 
 // Parse archive data in a Web Worker so the main thread stays responsive
 (function() {
