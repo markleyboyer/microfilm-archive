@@ -60,7 +60,7 @@ html = """<!DOCTYPE html>
   tr.files-row.visible { display: table-row; }
   tr.files-row td { padding: 14px 16px 20px 44px; border-bottom: 2px solid #c8bfa8; }
   .thumbnails { display: flex; flex-wrap: wrap; gap: 10px; }
-  .thumb-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .thumb-item { display: flex; flex-direction: column; align-items: center; gap: 4px; contain: layout style paint; }
   .thumb-img-wrap { position: relative; width: 90px; height: 70px; overflow: hidden; cursor: pointer; border: 1px solid #c8bfa8; border-radius: 3px; background: #e0d9cc; flex-shrink: 0; }
   .thumb-img-wrap img { position: absolute; top: 50%; left: 50%; transform-origin: center; transform: translate(-50%,-50%); width: 90px; height: 70px; object-fit: cover; transition: transform 0.2s; }
   .thumb-img-wrap:hover img { opacity: 0.88; }
@@ -447,25 +447,7 @@ function loadFiles(cell, g) {
     cell._toolbar = toolbar;
     cell.appendChild(toolbar);
 
-    // ── Thumbnails ──────────────────────────────────────────────────────────
-    // Images are queued and loaded 4 at a time so the browser never decodes
-    // dozens of images simultaneously, which was freezing the UI.
-    const imgQueue = [];
-    let activeLoads = 0;
-    const MAX_LOADS = 4;
-    function enqueueImg(img, src) {
-      imgQueue.push({img, src});
-      flushImgQueue();
-    }
-    function flushImgQueue() {
-      while (activeLoads < MAX_LOADS && imgQueue.length) {
-        const {img, src} = imgQueue.shift();
-        activeLoads++;
-        img.onload = img.onerror = function() { activeLoads--; flushImgQueue(); };
-        img.src = src;
-      }
-    }
-
+    // ── Thumbnails — DOM built in batches; images load in parallel ──────────
     const wrap = document.createElement('div');
     wrap.className = 'thumbnails';
     cell.appendChild(wrap);
@@ -503,10 +485,11 @@ function loadFiles(cell, g) {
         });
 
         const img = document.createElement('img');
+        img.loading = 'lazy';
         img.dataset.fname = f;
         img.alt = f;
+        img.src = thumbUrl(f);
         applyImgRotation(img);
-        enqueueImg(img, thumbUrl(f));  // load via queue, not immediately
 
         const btns = document.createElement('div');
         btns.className = 'thumb-btns';
