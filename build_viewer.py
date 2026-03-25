@@ -94,8 +94,10 @@ html = """<!DOCTYPE html>
   .lightbox.hidden { display: none; }
   .lb-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.88); }
   .lb-box { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-  .lb-img-wrap { display: flex; align-items: center; justify-content: center; width: 90vw; height: 80vh; overflow: hidden; }
-  .lb-img-wrap img { max-width: 90vw; max-height: 80vh; object-fit: contain; transform-origin: center; transition: transform 0.25s; }
+  .lb-img-wrap { display: flex; align-items: center; justify-content: center; width: 90vw; height: 80vh; overflow: hidden; cursor: zoom-in; }
+  .lb-img-wrap.zoomed { cursor: grab; }
+  .lb-img-wrap.dragging { cursor: grabbing; }
+  .lb-img-wrap img { max-width: 90vw; max-height: 80vh; object-fit: contain; transform-origin: center; user-select: none; }
   .lb-bar { display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.65); padding: 8px 12px; border-radius: 6px; }
   .lb-btn { padding: 6px 14px; background: #3d3020; color: #f5f0e8; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; font-family: inherit; white-space: nowrap; }
   .lb-btn:hover { background: #52432e; }
@@ -167,7 +169,8 @@ html = """<!DOCTYPE html>
 
 <script>
 let DATA = [];
-const R2_BASE = 'https://pub-e96a83f726634e6a8bac05a0641d11fe.r2.dev/images/';
+const R2_BASE   = 'https://pub-e96a83f726634e6a8bac05a0641d11fe.r2.dev/images/';
+const R2_THUMBS = 'https://pub-e96a83f726634e6a8bac05a0641d11fe.r2.dev/thumbs/';
 
 let currentSort = { key: 'date', dir: 1 };
 let viewMode = 'thumb';
@@ -307,6 +310,9 @@ async function pickFolder() {
 
 function fileUrl(fname) {
   return fileMap[fname] || R2_BASE + encodeURIComponent(fname);
+}
+function thumbUrl(fname) {
+  return fileMap[fname] || R2_THUMBS + encodeURIComponent(fname);
 }
 
 function sortBy(key) {
@@ -476,10 +482,10 @@ function loadFiles(cell, g) {
       });
 
       const img = document.createElement('img');
-      img.src = url;
       img.loading = 'lazy';
       img.dataset.fname = f;
       img.alt = f;
+      img.src = thumbUrl(f);
       applyImgRotation(img);
 
       const btns = document.createElement('div');
@@ -515,10 +521,10 @@ function loadFiles(cell, g) {
       imgWrap.addEventListener('click', () => openLightbox(g, idx));
 
       const img = document.createElement('img');
-      img.src = url;
       img.loading = 'lazy';
       img.dataset.fname = f;
       img.alt = f;
+      img.src = thumbUrl(f);
       applyImgRotation(img);
       imgWrap.appendChild(img);
 
@@ -642,17 +648,27 @@ function applyImgRotation(img) {
   img.style.transform = swap ? base + ' scale(0.78)' : base;
 }
 
+// Lightbox zoom/pan state
+const lb = { group: null, idx: 0 };
+let lbZoom = 1, lbPanX = 0, lbPanY = 0;
+
 function applyLbRotation(img) {
-  const deg = getRotation(img.dataset.fname);
+  const deg  = getRotation(img.dataset.fname);
   const swap = deg === 90 || deg === 270;
-  // Swap max constraints so rotated image still fits the viewport
   img.style.maxWidth  = swap ? '80vh' : '90vw';
   img.style.maxHeight = swap ? '90vw' : '80vh';
-  img.style.transform = 'rotate(' + deg + 'deg)';
+  img.style.transform = 'translate(' + lbPanX + 'px,' + lbPanY + 'px) rotate(' + deg + 'deg) scale(' + lbZoom + ')';
+  const wrap = document.querySelector('.lb-img-wrap');
+  wrap.classList.toggle('zoomed', lbZoom > 1);
+  const label = document.getElementById('lb-zoom-label');
+  if (label) label.textContent = lbZoom === 1 ? '1\u00d7' : (Math.round(lbZoom * 10) / 10) + '\u00d7';
 }
 
-// Lightbox
-const lb = { group: null, idx: 0 };
+function lbZoomBy(factor) {
+  lbZoom = Math.min(8, Math.max(1, lbZoom * factor));
+  if (lbZoom === 1) { lbPanX = 0; lbPanY = 0; }
+  applyLbRotation(document.getElementById('lb-img'));
+}
 
 function openLightbox(group, idx) {
   lb.group = group;
@@ -673,6 +689,7 @@ function lbNav(delta) {
 }
 
 function updateLightbox() {
+  lbZoom = 1; lbPanX = 0; lbPanY = 0;
   const f   = lb.group.files[lb.idx];
   const img = document.getElementById('lb-img');
   img.src            = fileUrl(f);
@@ -697,7 +714,49 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowRight')         lbNav(1);
   else if (e.key === 'r' || e.key === 'R') rotate(lb.group.files[lb.idx],  90);
   else if (e.key === 'l' || e.key === 'L') rotate(lb.group.files[lb.idx], -90);
+  else if (e.key === '+' || e.key === '=') lbZoomBy(1.5);
+  else if (e.key === '-')                  lbZoomBy(1 / 1.5);
+  else if (e.key === '0')                  { lbZoom = 1; lbPanX = 0; lbPanY = 0; applyLbRotation(document.getElementById('lb-img')); }
 });
+
+// Wheel to zoom in lightbox
+document.getElementById('lightbox').addEventListener('wheel', function(e) {
+  if (this.classList.contains('hidden')) return;
+  e.preventDefault();
+  lbZoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12);
+}, { passive: false });
+
+// Drag to pan when zoomed
+(function() {
+  const lightbox = document.getElementById('lightbox');
+  let dragging = false, startX, startY, startPanX, startPanY;
+  lightbox.addEventListener('mousedown', function(e) {
+    if (lbZoom <= 1 || e.target.tagName === 'BUTTON') return;
+    dragging = true;
+    startX = e.clientX; startY = e.clientY;
+    startPanX = lbPanX; startPanY = lbPanY;
+    document.querySelector('.lb-img-wrap').classList.add('dragging');
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    lbPanX = startPanX + (e.clientX - startX);
+    lbPanY = startPanY + (e.clientY - startY);
+    applyLbRotation(document.getElementById('lb-img'));
+  });
+  document.addEventListener('mouseup', function() {
+    if (!dragging) return;
+    dragging = false;
+    document.querySelector('.lb-img-wrap').classList.remove('dragging');
+  });
+  // Click image to toggle zoom when not dragging
+  document.querySelector('.lb-img-wrap').addEventListener('click', function(e) {
+    if (e.target.tagName === 'BUTTON') return;
+    if (Math.abs(lbPanX - (startPanX || 0)) < 5 && Math.abs(lbPanY - (startPanY || 0)) < 5) {
+      lbZoom === 1 ? lbZoomBy(2) : (function(){ lbZoom=1; lbPanX=0; lbPanY=0; applyLbRotation(document.getElementById('lb-img')); })();
+    }
+  });
+})();
 
 // Parse archive data in a Web Worker so the main thread stays responsive
 (function() {
@@ -774,8 +833,11 @@ document.addEventListener('keydown', e => {
         <li><kbd>&larr;</kbd> <kbd>&rarr;</kbd> &mdash; previous / next image</li>
         <li><kbd>R</kbd> &mdash; rotate clockwise 90&deg;</li>
         <li><kbd>L</kbd> &mdash; rotate counter-clockwise 90&deg;</li>
+        <li><kbd>+</kbd> / <kbd>-</kbd> &mdash; zoom in / out</li>
+        <li><kbd>0</kbd> &mdash; reset zoom to fit</li>
         <li><kbd>Esc</kbd> &mdash; close the lightbox</li>
       </ul>
+      <p><strong>Zooming</strong> &mdash; scroll the mouse wheel to zoom in and out, or use the <strong>+</strong> / <strong>&minus;</strong> buttons in the control bar. Click the image to zoom in; click again to reset. When zoomed in, drag the image to pan around it.</p>
 
       <h3>Rotating Images</h3>
       <p>Some microfilm scans were filmed sideways and need to be rotated to read correctly.</p>
@@ -813,6 +875,9 @@ document.addEventListener('keydown', e => {
       <button class="lb-btn" onclick="rotate(lb.group.files[lb.idx], -90)" title="Rotate left (L)">&#8634; CCW</button>
       <button class="lb-btn" onclick="rotate(lb.group.files[lb.idx],  90)" title="Rotate right (R)">&#8635; CW</button>
       <span class="lb-counter" id="lb-counter"></span>
+      <button class="lb-btn" onclick="lbZoomBy(1/1.5)" title="Zoom out (-)">&#8722;</button>
+      <span class="lb-counter" id="lb-zoom-label" style="min-width:2.8em;text-align:center">1&#xD7;</span>
+      <button class="lb-btn" onclick="lbZoomBy(1.5)" title="Zoom in (+)">+</button>
       <button class="lb-btn" id="lb-next" onclick="lbNav(1)">Next &#8594;</button>
       <button class="lb-btn close" onclick="closeLightbox()">&#10005; Close</button>
     </div>
