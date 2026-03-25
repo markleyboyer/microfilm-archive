@@ -421,100 +421,115 @@ function loadFiles(cell, g) {
     cell._toolbar = toolbar;
     cell.appendChild(toolbar);
 
-    // ── Thumbnails ─────────────────────────────────────────────────────────
+    // ── Thumbnails — built in batches to keep the page responsive ──────────
     const wrap = document.createElement('div');
     wrap.className = 'thumbnails';
-    g.files.forEach((f, idx) => {
-      const url   = fileUrl(f);
-      const label = f.replace(/^IMG_\d+ ?(\(\d+\))?_/, '').replace('.JPG', '');
-
-      const item = document.createElement('div');
-      item.className = 'thumb-item';
-      item.dataset.fname = f;
-
-      // Image wrapper — click opens lightbox or toggles selection
-      const imgWrap = document.createElement('div');
-      imgWrap.className = 'thumb-img-wrap';
-      imgWrap.addEventListener('click', e => {
-        if (e.ctrlKey || e.metaKey) {
-          // Ctrl/Cmd+click: toggle this image
-          const sel = getSel(g);
-          sel.has(f) ? sel.delete(f) : sel.add(f);
-          updateSelUI(g, cell);
-        } else if (e.shiftKey) {
-          // Shift+click: range select from last clicked
-          const sel  = getSel(g);
-          const last = lastClickIdx[gKey(g)];
-          const from = last !== undefined ? Math.min(last, idx) : 0;
-          const to   = last !== undefined ? Math.max(last, idx) : idx;
-          for (let i = from; i <= to; i++) sel.add(g.files[i]);
-          updateSelUI(g, cell);
-        } else {
-          openLightbox(g, idx);
-        }
-        lastClickIdx[gKey(g)] = idx;
-      });
-
-      const img = document.createElement('img');
-      img.loading = 'lazy';
-      img.dataset.fname = f;
-      img.alt = f;
-      img.src = thumbUrl(f);
-      applyImgRotation(img);
-
-      const btns = document.createElement('div');
-      btns.className = 'thumb-btns';
-      btns.appendChild(makeRotBtn('\u21ba', 'Rotate left',  f, -90));
-      btns.appendChild(makeRotBtn('\u21bb', 'Rotate right', f,  90));
-
-      imgWrap.appendChild(img);
-      imgWrap.appendChild(btns);
-
-      const labelEl = document.createElement('span');
-      labelEl.className = 'thumb-label';
-      labelEl.title = f;
-      labelEl.textContent = label;
-
-      item.appendChild(imgWrap);
-      item.appendChild(labelEl);
-      wrap.appendChild(item);
-    });
     cell.appendChild(wrap);
+
+    const BATCH = 20;
+    let bi = 0;
+    function addThumbBatch() {
+      const frag = document.createDocumentFragment();
+      for (let end = Math.min(bi + BATCH, g.files.length); bi < end; bi++) {
+        const f   = g.files[bi];
+        const idx = bi;
+        const label = f.replace(/^IMG_\d+ ?(\(\d+\))?_/, '').replace('.JPG', '');
+
+        const item = document.createElement('div');
+        item.className = 'thumb-item';
+        item.dataset.fname = f;
+
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'thumb-img-wrap';
+        imgWrap.addEventListener('click', e => {
+          if (e.ctrlKey || e.metaKey) {
+            const sel = getSel(g);
+            sel.has(f) ? sel.delete(f) : sel.add(f);
+            updateSelUI(g, cell);
+          } else if (e.shiftKey) {
+            const sel  = getSel(g);
+            const last = lastClickIdx[gKey(g)];
+            const from = last !== undefined ? Math.min(last, idx) : 0;
+            const to   = last !== undefined ? Math.max(last, idx) : idx;
+            for (let i = from; i <= to; i++) sel.add(g.files[i]);
+            updateSelUI(g, cell);
+          } else {
+            openLightbox(g, idx);
+          }
+          lastClickIdx[gKey(g)] = idx;
+        });
+
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.dataset.fname = f;
+        img.alt = f;
+        img.src = thumbUrl(f);
+        applyImgRotation(img);
+
+        const btns = document.createElement('div');
+        btns.className = 'thumb-btns';
+        btns.appendChild(makeRotBtn('\u21ba', 'Rotate left',  f, -90));
+        btns.appendChild(makeRotBtn('\u21bb', 'Rotate right', f,  90));
+
+        imgWrap.appendChild(img);
+        imgWrap.appendChild(btns);
+
+        const labelEl = document.createElement('span');
+        labelEl.className = 'thumb-label';
+        labelEl.title = f;
+        labelEl.textContent = label;
+
+        item.appendChild(imgWrap);
+        item.appendChild(labelEl);
+        frag.appendChild(item);
+      }
+      wrap.appendChild(frag);
+      if (bi < g.files.length) requestAnimationFrame(addThumbBatch);
+    }
+    addThumbBatch();
 
   } else {
     const wrap = document.createElement('div');
     wrap.className = 'list-items';
-    g.files.forEach((f, idx) => {
-      const url = fileUrl(f);
-      const item = document.createElement('div');
-      item.className = 'list-item';
-
-      // Small image — click opens lightbox
-      const imgWrap = document.createElement('div');
-      imgWrap.className = 'list-item-img-wrap';
-      imgWrap.addEventListener('click', () => openLightbox(g, idx));
-
-      const img = document.createElement('img');
-      img.loading = 'lazy';
-      img.dataset.fname = f;
-      img.alt = f;
-      img.src = thumbUrl(f);
-      applyImgRotation(img);
-      imgWrap.appendChild(img);
-
-      // Filename — click opens lightbox
-      const name = document.createElement('span');
-      name.className = 'list-item-name';
-      name.textContent = f;
-      name.addEventListener('click', () => openLightbox(g, idx));
-
-      item.appendChild(imgWrap);
-      item.appendChild(makeRotBtn('\u21ba', 'Rotate left',  f, -90));
-      item.appendChild(makeRotBtn('\u21bb', 'Rotate right', f,  90));
-      item.appendChild(name);
-      wrap.appendChild(item);
-    });
     cell.appendChild(wrap);
+
+    const BATCH = 40;
+    let bi = 0;
+    function addListBatch() {
+      const frag = document.createDocumentFragment();
+      for (let end = Math.min(bi + BATCH, g.files.length); bi < end; bi++) {
+        const f   = g.files[bi];
+        const idx = bi;
+        const item = document.createElement('div');
+        item.className = 'list-item';
+
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'list-item-img-wrap';
+        imgWrap.addEventListener('click', () => openLightbox(g, idx));
+
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.dataset.fname = f;
+        img.alt = f;
+        img.src = thumbUrl(f);
+        applyImgRotation(img);
+        imgWrap.appendChild(img);
+
+        const name = document.createElement('span');
+        name.className = 'list-item-name';
+        name.textContent = f;
+        name.addEventListener('click', () => openLightbox(g, idx));
+
+        item.appendChild(imgWrap);
+        item.appendChild(makeRotBtn('\u21ba', 'Rotate left',  f, -90));
+        item.appendChild(makeRotBtn('\u21bb', 'Rotate right', f,  90));
+        item.appendChild(name);
+        frag.appendChild(item);
+      }
+      wrap.appendChild(frag);
+      if (bi < g.files.length) requestAnimationFrame(addListBatch);
+    }
+    addListBatch();
   }
 }
 
