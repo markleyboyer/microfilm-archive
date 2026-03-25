@@ -29,7 +29,7 @@ html = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Farmscape Weather Data - Microfilm Archive v3.1</title>
+<title>Farmscape Weather Data - Microfilm Archive v3.2</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Georgia, serif; background: #f5f0e8; color: #2c2416; }
@@ -133,7 +133,7 @@ html = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>Farmscape Weather Data &mdash; Microfilm Archive <span style="font-size:0.65em;opacity:0.55;font-style:italic">v3.1</span></h1>
+  <h1>Farmscape Weather Data &mdash; Microfilm Archive <span style="font-size:0.65em;opacity:0.55;font-style:italic">v3.2</span></h1>
   <p>New York Academy Reports &bull; 1827&ndash;1860 &bull; Click any row to browse its files</p>
 </header>
 <div class="controls">
@@ -486,6 +486,7 @@ function loadFiles(cell, g) {
 
         const img = document.createElement('img');
         img.loading = 'lazy';
+        img.decoding = 'async';
         img.dataset.fname = f;
         img.alt = f;
         img.src = thumbUrl(f);
@@ -534,6 +535,7 @@ function loadFiles(cell, g) {
 
         const img = document.createElement('img');
         img.loading = 'lazy';
+        img.decoding = 'async';
         img.dataset.fname = f;
         img.alt = f;
         img.src = thumbUrl(f);
